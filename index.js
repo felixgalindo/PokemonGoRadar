@@ -19,6 +19,7 @@ var encounteredRare = false;
 var commonRate = 10 * 60000;
 var rareRate = 60000;
 var rareRadius = 250;
+var hbFail = 0;
 
 var rarePokemonList =
     ["Bulbasaur",
@@ -54,7 +55,6 @@ var rarePokemonList =
         "Magnemite",
         "Magneton",
         "Farfetch'd",
-        "Doduo",
         "Dewgong",
         "Grimer",
         "Muk",
@@ -165,6 +165,9 @@ var searchingForRareName = '';
 var rareCenterLat = location.coords.latitude;
 var rareCenterLong = location.coords.longitude;
 var radarMode = 'on';
+var loopInterval;
+var rareAlertInterval;
+var alertInterval;
 
 console.log("Center location is ", location);
 console.log("Search radius is ", searchRadius, "meters");
@@ -205,6 +208,10 @@ app.post('/settings/', function(req, res) {
         if (req.body.mode == 'on') {
             setRandomLocation(a, searchRadius, location.coords.latitude, location.coords.longitude);
         }
+        clearInterval(rareAlertInterval);
+        clearInterval(alertInterval);
+        setRareAlertInterval(rareRate);
+        setAlertInterval(commonRate);
         radarMode = req.body.mode;
         console.log("Setting radar mode to ", radarMode);
     }, 10000);
@@ -258,171 +265,195 @@ var setRandomLocation = function(instance, radius, centerLat, centerLong) {
 }
 
 //Interval for sending out rare pokemon locations
-setInterval(function() {
-    var message = '';
+var setRareAlertInterval = function(rate) {
+    rareAlertInterval = setInterval(function() {
+        var message = '';
 
-    //Filter encountered array
-    var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
-        return index == self.indexOf(elem);
-    })
+        //Filter encountered array
+        var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
+            return index == self.indexOf(elem);
+        })
 
-    if (uniqueEncounteredArray.length) {
-        for (var i = 0; i < uniqueEncounteredArray.length; i++) {
-            message += uniqueEncounteredArray[i];
+        if (uniqueEncounteredArray.length) {
+            for (var i = 0; i < uniqueEncounteredArray.length; i++) {
+                message += uniqueEncounteredArray[i];
+            }
         }
-    }
 
-    //If message isn't empty send it out
-    if (message != '') {
-        if (encounteredRare) { //send only for rare pokemon
-            encounteredRare = false;
+        //If message isn't empty send it out
+        if (message != '') {
+            if (encounteredRare) { //send only for rare pokemon
+                encounteredRare = false;
+                console.log("Sending out sms:", message);
+                client.sendMessage({
+                    to: '8177052499',
+                    from: '8179853792',
+                    body: message
+                });
+
+                message = '';
+                encounteredArray = [];
+            }
+
+        }
+    }, rate);
+}
+
+//Interval for sending out common pokemon locations
+var setAlertInterval = function(rate) {
+    alertInterval = setInterval(function() {
+        var message = '';
+
+        //Filter encountered array
+        var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
+            return index == self.indexOf(elem);
+        })
+
+        if (uniqueEncounteredArray.length) {
+            for (var i = 0; i < uniqueEncounteredArray.length; i++) {
+                message += uniqueEncounteredArray[i];
+            }
+        }
+        //If message isn't empty send it out
+        if (message != '') {
             console.log("Sending out sms:", message);
             client.sendMessage({
                 to: '8177052499',
                 from: '8179853792',
                 body: message
             });
-
             message = '';
             encounteredArray = [];
         }
 
-    }
-}, rareRate);
-
-//Interval for sending out common pokemon locations
-setInterval(function() {
-    var message = '';
-
-    //Filter encountered array
-    var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
-        return index == self.indexOf(elem);
-    })
-
-    if (uniqueEncounteredArray.length) {
-        for (var i = 0; i < uniqueEncounteredArray.length; i++) {
-            message += uniqueEncounteredArray[i];
-        }
-    }
-    //If message isn't empty send it out
-    if (message != '') {
-        console.log("Sending out sms:", message);
-        client.sendMessage({
-            to: '8177052499',
-            from: '8179853792',
-            body: message
-        });
-        message = '';
-        encounteredArray = [];
-    }
-
-}, commonRate);
+    }, rate);
+}
 
 var runInterval = function(rate) {
 
-    setInterval(function() {
+    loopInterval = setInterval(function() {
         if (radarMode == 'on') {
             a.Heartbeat(function(err, hb) {
                 if (err) {
                     console.log(err);
                 }
 
-                var searchCoordinates = a.GetLocationCoords();
+                if (hb) {
+                    hbFail = 0;
+                    var searchCoordinates = a.GetLocationCoords();
 
-                //console.log("Center coordinates", searchCoordinates.latitude, ",", searchCoordinates.longitude, "with radius", searchRadius , "meters...");
-                console.log("Searching for poke men at coordinates", searchCoordinates.latitude, ",", searchCoordinates.longitude);
-                if (hb.cells) {
-                    //Shows Nearby Pokemon
-                    for (var i = hb.cells.length - 1; i >= 0; i--) {
-                        for (var j = 0; j < 6; j++) {
-                            if (hb.cells[i].NearbyPokemon[j]) {
-                                //console.log(a.pokemonlist[0])
-                                var pokemon = a.pokemonlist[parseInt(hb.cells[i].NearbyPokemon[j].PokedexNumber) - 1];
-                                if (rarePokemonList.indexOf(pokemon.name) > -1) {
-                                    if (searchingForRare) {
-                                        console.log("Rare pokemon nearby...but already looking for:", searchingForRareName);
-                                    } else {
-                                        searchingForRare = true;
-                                        searchingForRareName = pokemon.name;
-                                        console.log("Rare pokemon nearby...Narrowing down search to:", rareRadius, "meters");
-                                        rareCenterLat = searchCoordinates.latitude;
-                                        rareCenterLong = searchCoordinates.longitude;
+                    //console.log("Center coordinates", searchCoordinates.latitude, ",", searchCoordinates.longitude, "with radius", searchRadius , "meters...");
+                    console.log("Searching for poke men at coordinates", searchCoordinates.latitude, ",", searchCoordinates.longitude);
+                    if (hb.cells) {
+                        //Shows Nearby Pokemon
+                        for (var i = hb.cells.length - 1; i >= 0; i--) {
+                            for (var j = 0; j < 6; j++) {
+                                if (hb.cells[i].NearbyPokemon[j]) {
+                                    //console.log(a.pokemonlist[0])
+                                    var pokemon = a.pokemonlist[parseInt(hb.cells[i].NearbyPokemon[j].PokedexNumber) - 1];
+                                    if (rarePokemonList.indexOf(pokemon.name) > -1) {
+                                        if (searchingForRare) {
+                                            console.log("Rare pokemon nearby...but already looking for:", searchingForRareName);
+                                        } else {
+                                            searchingForRare = true;
+                                            searchingForRareName = pokemon.name;
+                                            console.log("Rare pokemon nearby...Narrowing down search to:", rareRadius, "meters");
+                                            rareCenterLat = searchCoordinates.latitude;
+                                            rareCenterLong = searchCoordinates.longitude;
+                                        }
+                                    }
+                                    console.log('1[+] There is a ' + pokemon.name + ' near.');
+
+
+                                }
+                            }
+                        }
+                    }
+
+                    // Show Catchable Pokemon
+                    if (hb.cells) {
+                        for (i = hb.cells.length - 1; i >= 0; i--) {
+
+                            for (var j = hb.cells[i].MapPokemon.length - 1; j >= 0; j--) { // use async lib with each or eachSeries should be better :)
+                                var currentPokemon = hb.cells[i].MapPokemon[j];
+                                var pokedexInfo = a.pokemonlist[parseInt(currentPokemon.PokedexTypeId) - 1];
+                                var link = "https://maps.google.com/maps?q=" + searchCoordinates.latitude + "," + searchCoordinates.longitude;
+                                encounteredArray.push('Encountered pokemon ' + pokedexInfo.name + " at " + link + "\r\n");
+                                console.log('Encountered pokemon ' + pokedexInfo.name + " at " + link);
+                                if (rarePokemonList.indexOf(pokedexInfo.name) > -1) {
+                                    encounteredRare = true;
+                                    console.log("RAAAAAAAREEEEEEEEEE POKEMON!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                                    if (searchingForRareName == pokedexInfo.name) {
+                                        searchingForRare = false;
+                                        searchingForRareCount = 0;
+                                        searchingForRareName = '';
+                                        console.log("Found that specific pokemon I was looking for. Clearing from list:", pokedexInfo.name);
                                     }
                                 }
-                                console.log('1[+] There is a ' + pokemon.name + ' near.');
-
 
                             }
                         }
                     }
-                }
 
-                // Show Catchable Pokemon
-                if (hb.cells) {
-                    for (i = hb.cells.length - 1; i >= 0; i--) {
-
-                        for (var j = hb.cells[i].MapPokemon.length - 1; j >= 0; j--) { // use async lib with each or eachSeries should be better :)
-                            var currentPokemon = hb.cells[i].MapPokemon[j];
-                            var pokedexInfo = a.pokemonlist[parseInt(currentPokemon.PokedexTypeId) - 1];
-                            var link = "https://maps.google.com/maps?q=" + searchCoordinates.latitude + "," + searchCoordinates.longitude;
-                            encounteredArray.push('Encountered pokemon ' + pokedexInfo.name + " at " + link + "\r\n");
-                            console.log('Encountered pokemon ' + pokedexInfo.name + " at " + link);
-                            if (rarePokemonList.indexOf(pokedexInfo.name) > -1) {
-                                encounteredRare = true;
-                                console.log("RAAAAAAAREEEEEEEEEE POKEMON!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                                if (searchingForRareName == pokedexInfo.name) {
-                                    searchingForRare = false;
-                                    searchingForRareCount = 0;
-                                    searchingForRareName = '';
-                                    console.log("Found that specific pokemon I was looking for. Clearing from list:", pokedexInfo.name);
-                                }
-                            }
-
-                        }
+                    if (searchingForRareCount > 100) {
+                        console.log("Giving up looking for specific pokemon:", searchingForRareName);
+                        searchingForRareCount = 0;
+                        searchingForRareName = '';
+                        searchingForRare = false;
                     }
-                }
 
-                if (searchingForRareCount > 100) {
-                    console.log("Giving up looking for specific pokemon:", searchingForRareName);
-                    searchingForRareCount = 0;
-                    searchingForRareName = '';
-                    searchingForRare = false;
-                }
-
-                if (searchingForRare == true) {
-                    console.log("Looking for specific pokemon:", searchingForRareName);
-                    setRandomLocation(a, rareRadius, rareCenterLat, rareCenterLong);
-                    searchingForRareCount++;
+                    if (searchingForRare == true) {
+                        console.log("Looking for specific pokemon:", searchingForRareName);
+                        setRandomLocation(a, rareRadius, rareCenterLat, rareCenterLong);
+                        searchingForRareCount++;
+                    } else {
+                        setRandomLocation(a, searchRadius, location.coords.latitude, location.coords.longitude);
+                    }
                 } else {
-                    setRandomLocation(a, searchRadius, location.coords.latitude, location.coords.longitude);
+                    console.log("hb is not defined");
+                    hbFail++;
+                    if (hbFail > 5) {
+                        hbFail = 0;
+                        console.log("Something is wrong...Clearing interval and re inititing", searchingForRareName);
+                        clearInterval(loopInterval);
+                        PokemonGO = require('pokemon-go-node-api');
+                        a = new PokemonGO.Pokeio();
+                        init();
+                    }
                 }
-
             });
         }
     }, rate);
 }
 
-a.init(username, password, location, provider, function(err) {
-    if (err) throw err;
-
-    console.log('1[i] Center location: ' + a.playerInfo.locationName);
-    console.log('1[i] Center lat/long/alt: : ' + a.playerInfo.latitude + ' ' + a.playerInfo.longitude + ' ' + a.playerInfo.altitude);
-
-    a.GetProfile(function(err, profile) {
+var init = function() {
+    a.init(username, password, location, provider, function(err) {
         if (err) throw err;
 
-        console.log('1[i] Username: ' + profile.username);
-        console.log('1[i] Poke Storage: ' + profile.poke_storage);
-        console.log('1[i] Item Storage: ' + profile.item_storage);
+        console.log('1[i] Center location: ' + a.playerInfo.locationName);
+        console.log('1[i] Center lat/long/alt: : ' + a.playerInfo.latitude + ' ' + a.playerInfo.longitude + ' ' + a.playerInfo.altitude);
 
-        var poke = 0;
-        if (profile.currency[0].amount) {
-            poke = profile.currency[0].amount;
-        }
+        a.GetProfile(function(err, profile) {
+            if (err) throw err;
 
-        console.log('1[i] Pokecoin: ' + poke);
-        console.log('1[i] Stardust: ' + profile.currency[1].amount);
+            console.log('1[i] Username: ' + profile.username);
+            console.log('1[i] Poke Storage: ' + profile.poke_storage);
+            console.log('1[i] Item Storage: ' + profile.item_storage);
 
-        runInterval(5000);
+            var poke = 0;
+            if (profile.currency[0].amount) {
+                poke = profile.currency[0].amount;
+            }
+
+            console.log('1[i] Pokecoin: ' + poke);
+            console.log('1[i] Stardust: ' + profile.currency[1].amount);
+
+            runInterval(5000);
+            setRareAlertInterval(rareRate);
+            setAlertInterval(commonRate);
+        });
     });
-});
+
+}
+
+init();
