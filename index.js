@@ -18,7 +18,7 @@ var encounteredArray = [];
 var encounteredRare = false;
 var commonRate = 10 * 60000;
 var rareRate = 60000;
-var rareRadius = 250;
+var rareRadius = 100;
 var hbFail = 0;
 
 var rarePokemonList =
@@ -102,7 +102,8 @@ var rarePokemonList =
         "Dragonair",
         "Dragonite",
         "Mewtwo",
-        "Mew"
+        "Mew",
+        "Poliwrath"
     ];
 
 // //Neals
@@ -268,7 +269,7 @@ var setRandomLocation = function(instance, radius, centerLat, centerLong) {
 var setRareAlertInterval = function(rate) {
     rareAlertInterval = setInterval(function() {
         var message = '';
-
+        console.log("In rareAlertInterval, rate:", rareRate);
         //Filter encountered array
         var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
             return index == self.indexOf(elem);
@@ -304,6 +305,7 @@ var setAlertInterval = function(rate) {
     alertInterval = setInterval(function() {
         var message = '';
 
+        console.log("In alertInterval, rate:", commonRate);
         //Filter encountered array
         var uniqueEncounteredArray = encounteredArray.filter(function(elem, index, self) {
             return index == self.indexOf(elem);
@@ -316,6 +318,7 @@ var setAlertInterval = function(rate) {
         }
         //If message isn't empty send it out
         if (message != '') {
+            encounteredRare = false;
             console.log("Sending out sms:", message);
             client.sendMessage({
                 to: '8177052499',
@@ -380,7 +383,7 @@ var runInterval = function(rate) {
                                 var link = "https://maps.google.com/maps?q=" + searchCoordinates.latitude + "," + searchCoordinates.longitude;
                                 encounteredArray.push('Encountered pokemon ' + pokedexInfo.name + " at " + link + "\r\n");
                                 console.log('Encountered pokemon ' + pokedexInfo.name + " at " + link);
-                                if (rarePokemonList.indexOf(pokedexInfo.name) > -1) {
+                                if (rarePokemonList.indexOf(pokedexInfo.name) > -1 || pokedexInfo.name == searchingForRareName) {
                                     encounteredRare = true;
                                     console.log("RAAAAAAAREEEEEEEEEE POKEMON!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                                     if (searchingForRareName == pokedexInfo.name) {
@@ -414,7 +417,7 @@ var runInterval = function(rate) {
                     hbFail++;
                     if (hbFail > 5) {
                         hbFail = 0;
-                        console.log("Something is wrong...Clearing interval and re inititing", searchingForRareName);
+                        console.log("Something is wrong...Clearing interval and re inititing");
                         clearInterval(loopInterval);
                         PokemonGO = require('pokemon-go-node-api');
                         a = new PokemonGO.Pokeio();
@@ -449,6 +452,8 @@ var init = function() {
             console.log('1[i] Stardust: ' + profile.currency[1].amount);
 
             runInterval(5000);
+            clearInterval(rareAlertInterval);
+            clearInterval(alertInterval);
             setRareAlertInterval(rareRate);
             setAlertInterval(commonRate);
         });
